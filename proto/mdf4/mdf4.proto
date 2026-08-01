@@ -1,0 +1,10 @@
+syntax = "proto3";
+package mdf4;
+import "mdf4/common.proto";
+
+// Root of the metadata document produced by mdf4::extract::extractFile.
+// Channel groups and channels are added by the reader core; sample data never
+// travels here — it comes back from mdf4::extract::decodeChannel.
+message File {
+  repeated Diagnostic diagnostics = 1;   // lossy/guessed events from the block-graph walk
+}

@@ -1,0 +1,18 @@
+syntax = "proto3";
+package mdf4;
+
+// Severity of a parse-time diagnostic. Emitted only on lossy or guessed events,
+// never for losslessly-preserved content.
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  WARNING = 1;   // value defaulted / truncated / out of enum range
+  DROPPED = 2;   // whole record or section skipped
+}
+
+// A single parse-time diagnostic. `location` is the best available position —
+// for this binary format, the block path plus file offset.
+message Diagnostic {
+  string location = 1;
+  string message = 2;
+  Severity severity = 3;
+}

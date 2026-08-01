@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            name: Linux x86_64
+            artifact: mdf4parser-x86_64-linux-gnu
+          - os: ubuntu-24.04-arm
+            name: Linux ARM64
+            artifact: mdf4parser-aarch64-linux-gnu
+
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build protobuf-compiler libprotobuf-dev libabsl-dev
+
+      - name: Download release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p lib
+          gh release download --repo dnbmch/mdf4-parser-lib --pattern "${{ matrix.artifact }}*.tar.gz" --dir .
+          tar xzf ${{ matrix.artifact }}*.tar.gz -C lib/
+
+      - name: Configure
+        run: cmake -B build -G Ninja -DMDF4_LIB_DIR=lib
+
+      - name: Build examples
+        run: cmake --build build
+
+  windows-mingw:
+    name: Windows MinGW
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-protobuf
+
+      - uses: actions/checkout@v4
+
+      - name: Download release artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p lib
+          gh release download --repo dnbmch/mdf4-parser-lib --pattern "mdf4parser-x86_64-windows-mingw*.tar.gz" --dir .
+          tar xzf mdf4parser-x86_64-windows-mingw*.tar.gz -C lib/
+
+      - name: Configure
+        run: cmake -B build -G Ninja -DMDF4_LIB_DIR=lib
+
+      - name: Build examples
+        run: cmake --build build
+
+  windows-msvc:
+    name: Windows MSVC
+    runs-on: windows-latest
+    env:
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg-cache,readwrite
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: vcpkg-cache
+          key: vcpkg-x64-windows-static-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: vcpkg-x64-windows-static-
+
+      - name: Install protobuf via vcpkg
+        run: vcpkg install protobuf
+
+      - name: Download release artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p lib
+          gh release download --repo dnbmch/mdf4-parser-lib --pattern "mdf4parser-x86_64-windows-msvc*.tar.gz" --dir .
+          tar xzf mdf4parser-x86_64-windows-msvc*.tar.gz -C lib/
+
+      - name: Configure
+        run: >
+          cmake -B build
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DVCPKG_TARGET_TRIPLET=x64-windows-static
+          -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+          -DMDF4_LIB_DIR=lib
+
+      - name: Build examples
+        run: cmake --build build --config Release
