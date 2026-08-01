@@ -68,6 +68,8 @@ mdf4::Series series = mdf4::extract::decodeChannel("path/to/file.mf4", 0, 1);
 
 - C++17 compiler (GCC, Clang, or MSVC)
 - Protocol Buffers (protobuf) runtime library
+- zlib — the reader inflates `##DZ` compressed data blocks, so the static
+  library carries zlib symbols the consumer must resolve
 
 ## License
 

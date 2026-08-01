@@ -27,6 +27,30 @@ int main(int argc, char* argv[]) {
     mdf4::File file = mdf4::extract::extractFile(path);
 
     cout << "MDF4: " << (path.empty() ? "(no file)" : path) << endl;
+    if (!path.empty())
+        cout << "Version: " << file.version() << " (" << file.version_num() << ")"
+             << (file.finalized() ? ", finalized" : ", unfinalized") << endl;
+
+    for (int g = 0; g < file.groups_size(); ++g) {
+        const mdf4::ChannelGroup& group = file.groups(g);
+        cout << "Group " << g << " \"" << group.name() << "\": " << group.cycle_count()
+             << " cycles, " << mdf4::StorageLayout_Name(group.storage()) << endl;
+        for (int c = 0; c < group.channels_size(); ++c) {
+            const mdf4::Channel& channel = group.channels(c);
+            cout << "  [" << c << "] " << channel.name();
+            if (!channel.unit().empty())
+                cout << " [" << channel.unit() << "]";
+            cout << " " << mdf4::DataType_Name(channel.data_type()) << "/"
+                 << mdf4::ConversionKind_Name(channel.conversion().kind());
+            if (channel.is_master())
+                cout << " master";
+            if (!channel.decodable())
+                cout << " - not decodable: " << channel.not_decodable_reason();
+            cout << endl;
+        }
+    }
+
+    // Samples come back separately: decodeChannel(path, group, channel).
     cout << "Diagnostics: " << file.diagnostics_size() << endl;
     for (const auto& diag : file.diagnostics())
         cout << "  [" << mdf4::Severity_Name(diag.severity()) << "] "

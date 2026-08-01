@@ -6,12 +6,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 cmake_policy(SET CMP0091 NEW)
 
 # ---------------------------------------------------------------------------
-# Find protobuf (needed for linking)
+# Find dependencies (needed for linking)
 # ---------------------------------------------------------------------------
 find_package(Protobuf CONFIG QUIET)
 if(NOT TARGET protobuf::libprotobuf)
     find_package(Protobuf REQUIRED)
 endif()
+
+# The reader inflates DZBLOCK payloads, so the static library carries zlib
+# symbols that the consumer must resolve.
+find_package(ZLIB REQUIRED)
 
 # ---------------------------------------------------------------------------
 # Prebuilt static library
@@ -46,7 +50,7 @@ if(NOT TARGET mdf4parser)
         ${MDF4_LIB_DIR}
     )
 
-    target_link_libraries(mdf4parser INTERFACE protobuf::libprotobuf)
+    target_link_libraries(mdf4parser INTERFACE protobuf::libprotobuf ZLIB::ZLIB)
 endif()
 
 # ---------------------------------------------------------------------------

@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build protobuf-compiler libprotobuf-dev libabsl-dev
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build protobuf-compiler libprotobuf-dev libabsl-dev zlib1g-dev
 
       - name: Download release artifacts
         env:
@@ -59,6 +59,7 @@ jobs:
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-ninja
             mingw-w64-x86_64-protobuf
+            mingw-w64-x86_64-zlib
 
       - uses: actions/checkout@v4
 
@@ -95,7 +96,7 @@ jobs:
           restore-keys: vcpkg-x64-windows-static-
 
       - name: Install protobuf via vcpkg
-        run: vcpkg install protobuf
+        run: vcpkg install protobuf zlib
 
       - name: Download release artifacts
         shell: bash

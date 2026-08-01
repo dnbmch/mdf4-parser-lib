@@ -2,9 +2,105 @@ syntax = "proto3";
 package mdf4;
 import "mdf4/common.proto";
 
+// Raw signal type of a channel as stored in the record. Only the little-endian
+// numeric families are decoded; everything else is described but not read.
+enum DataType {
+  DATA_TYPE_UNSPECIFIED = 0;
+  UINT_LE = 1;
+  SINT_LE = 2;
+  FLOAT_LE = 3;
+  DATA_TYPE_OTHER = 4;   // big-endian, string, byte array, MIME, CANopen, complex
+}
+
+// Conversion family mapping raw values to physical values.
+enum ConversionKind {
+  CONVERSION_KIND_UNSPECIFIED = 0;
+  IDENTITY = 1;
+  LINEAR = 2;
+  RATIONAL = 3;
+  TAB_INTP = 4;
+  TAB_NOINTP = 5;
+  VALUE_TO_TEXT = 6;
+  CONVERSION_OTHER = 7;
+}
+
+// How a channel group's records are stored.
+enum StorageLayout {
+  STORAGE_UNSPECIFIED = 0;
+  STORAGE_NONE = 1;      // no data block linked
+  ROW_DT = 2;            // contiguous records in a DTBLOCK
+  COLUMN_DV = 3;         // a single DVBLOCK
+  COLUMN_LD = 4;         // an LDBLOCK fragment list
+  STORAGE_OTHER = 5;     // a storage shape this reader does not decode
+}
+
+// One entry of a value-to-text conversion table.
+message TextEntry {
+  double value = 1;
+  string text = 2;
+}
+
+message Conversion {
+  ConversionKind kind = 1;
+  uint32 cc_type = 2;                // raw cc_type, including families we do not apply
+  repeated double params = 3;        // cc_val for the numeric families
+  repeated TextEntry entries = 4;    // value-to-text table
+  string default_text = 5;
+  string unit = 6;
+}
+
+message Channel {
+  string name = 1;
+  string unit = 2;                   // the channel's unit, else the conversion's
+  string comment = 3;                // TX text verbatim, or the raw MD XML
+  string source_name = 4;
+  string source_path = 5;
+  uint32 cn_type = 6;
+  uint32 sync_type = 7;
+  DataType data_type = 8;
+  uint32 raw_data_type = 9;          // raw cn_data_type
+  uint32 byte_offset = 10;
+  uint32 bit_offset = 11;
+  uint32 bit_count = 12;
+  Conversion conversion = 13;
+  uint64 sample_count = 14;
+  bool is_master = 15;
+  bool decodable = 16;               // decodeChannel returns samples for this channel
+  string not_decodable_reason = 17;
+}
+
+message ChannelGroup {
+  string name = 1;                   // acquisition name
+  string source_name = 2;
+  string comment = 3;
+  uint64 cycle_count = 4;            // clamped to the records actually present
+  uint32 data_bytes = 5;
+  uint32 inval_bytes = 6;            // counted in the record stride, never evaluated
+  StorageLayout storage = 7;
+  bool compressed = 8;               // at least one fragment is a DZBLOCK
+  bool remote_master = 9;            // cg_flags bit 3
+  uint32 master_group = 10;          // index into File.groups, remote master only
+  bool master_resolved = 11;
+  uint64 record_id = 12;
+  repeated Channel channels = 13;
+}
+
+message FileHistory {
+  uint64 time_ns = 1;
+  string comment = 2;
+}
+
 // Root of the metadata document produced by mdf4::extract::extractFile.
-// Channel groups and channels are added by the reader core; sample data never
-// travels here — it comes back from mdf4::extract::decodeChannel.
+// `groups` is the flattened block walk: data groups in dg_dg_next order, channel
+// groups within each in cg_cg_next order, channels in cn_cn_next order. The same
+// walk indexes mdf4::extract::decodeChannel. Sample data never travels here.
 message File {
-  repeated Diagnostic diagnostics = 1;   // lossy/guessed events from the block-graph walk
+  repeated Diagnostic diagnostics = 1;
+  string version = 2;                // id_vers, e.g. "4.20"
+  uint32 version_num = 3;            // id_ver, e.g. 420
+  bool finalized = 4;
+  uint64 start_time_ns = 5;
+  string comment = 6;
+  repeated FileHistory history = 7;
+  repeated ChannelGroup groups = 8;
 }
