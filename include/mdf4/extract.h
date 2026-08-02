@@ -17,7 +17,7 @@ namespace mdf4::extract {
 
 // Walk the block graph into the typed metadata document. Reads block headers
 // only; open cost is proportional to structure, not file size.
-mdf4::File extractFile(const std::string& path);
+mdf4::File extractFile(const std::string& path) noexcept;
 
 // Decode one channel's samples plus its time master into physical doubles.
 // `group` and `channel` index the same flattened walk as File.groups. The
@@ -25,6 +25,6 @@ mdf4::File extractFile(const std::string& path);
 // come back the same length. Other channels of the group are never materialized.
 Series decodeChannel(const std::string& path, uint32_t group, uint32_t channel,
                      uint64_t firstSample = 0,
-                     uint64_t sampleCount = std::numeric_limits<uint64_t>::max());
+                     uint64_t sampleCount = std::numeric_limits<uint64_t>::max()) noexcept;
 
 } // namespace mdf4::extract
