@@ -6,7 +6,9 @@ Prebuilt static library, public headers, and protobuf schema for the **mdf4-pars
 
 ## Downloads
 
-Prebuilt static libraries are available on the [Releases](https://github.com/dnbmch/mdf4-parser-lib/releases) page:
+This repository is prepared for the first v0.1.0 publication. Once the source
+release workflow publishes it, prebuilt static libraries will be available on the
+[Releases](https://github.com/dnbmch/mdf4-parser-lib/releases) page:
 
 | Artifact | Platform |
 |----------|----------|
@@ -23,7 +25,7 @@ Prebuilt static libraries are available on the [Releases](https://github.com/dnb
 git clone https://github.com/dnbmch/mdf4-parser-lib.git
 cd mdf4-parser-lib
 
-# 2. Download and extract the prebuilt library for your platform
+# 2. After v0.1.0 is published, download and extract the library for your platform
 #    (from the Releases page, extract into lib/)
 mkdir -p lib
 tar xzf mdf4parser-x86_64-linux-gnu-v0.1.0.tar.gz -C lib/
