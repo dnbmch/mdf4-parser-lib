@@ -2,14 +2,17 @@ syntax = "proto3";
 package mdf4;
 import "mdf4/common.proto";
 
-// Raw signal type of a channel as stored in the record. Only the little-endian
+// Raw signal type of a channel as stored in the record. Both Byte orders of the
 // numeric families are decoded; everything else is described but not read.
 enum DataType {
   DATA_TYPE_UNSPECIFIED = 0;
   UINT_LE = 1;
   SINT_LE = 2;
   FLOAT_LE = 3;
-  DATA_TYPE_OTHER = 4;   // big-endian, string, byte array, MIME, CANopen, complex
+  DATA_TYPE_OTHER = 4;   // string, byte array, MIME, CANopen, complex
+  UINT_BE = 5;
+  SINT_BE = 6;
+  FLOAT_BE = 7;
 }
 
 // Conversion family mapping raw values to physical values.
@@ -22,13 +25,15 @@ enum ConversionKind {
   TAB_NOINTP = 5;
   VALUE_TO_TEXT = 6;
   CONVERSION_OTHER = 7;
+  ALGEBRAIC = 8;
+  TAB_RANGE = 9;
 }
 
 // How a channel group's records are stored.
 enum StorageLayout {
   STORAGE_UNSPECIFIED = 0;
   STORAGE_NONE = 1;      // no data block linked
-  ROW_DT = 2;            // contiguous records in a DTBLOCK
+  ROW_DT = 2;            // contiguous records: a DTBLOCK, or a DT block list (DL, optionally under HL); record-ID prefixed when unsorted
   COLUMN_DV = 3;         // a single DVBLOCK
   COLUMN_LD = 4;         // an LDBLOCK fragment list
   STORAGE_OTHER = 5;     // a storage shape this reader does not decode
@@ -47,6 +52,7 @@ message Conversion {
   repeated TextEntry entries = 4;    // value-to-text table
   string default_text = 5;
   string unit = 6;
+  string formula = 7;                // algebraic formula text, verbatim
 }
 
 message Channel {
@@ -60,7 +66,7 @@ message Channel {
   DataType data_type = 8;
   uint32 raw_data_type = 9;          // raw cn_data_type
   uint32 byte_offset = 10;
-  uint32 bit_offset = 11;
+  uint32 bit_offset = 11;            // LSB of the value inside the first Byte
   uint32 bit_count = 12;
   Conversion conversion = 13;
   uint64 sample_count = 14;
@@ -73,7 +79,11 @@ message ChannelGroup {
   string name = 1;                   // acquisition name
   string source_name = 2;
   string comment = 3;
-  uint64 cycle_count = 4;            // clamped to the records actually present
+  // Clamped to the records actually present, except in an unsorted data group:
+  // there the records are only countable by streaming the data block, which
+  // extractFile never does, so the stated count travels as written and
+  // decodeChannel may return a shorter series.
+  uint64 cycle_count = 4;
   uint32 data_bytes = 5;
   uint32 inval_bytes = 6;            // counted in the record stride, never evaluated
   StorageLayout storage = 7;
@@ -81,7 +91,7 @@ message ChannelGroup {
   bool remote_master = 9;            // cg_flags bit 3
   uint32 master_group = 10;          // index into File.groups, remote master only
   bool master_resolved = 11;
-  uint64 record_id = 12;
+  uint64 record_id = 12;             // cg_record_id, tagging this group's records when unsorted
   repeated Channel channels = 13;
 }
 
