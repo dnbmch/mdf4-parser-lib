@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
@@ -20,6 +21,7 @@ jobs:
             name: Linux ARM64
             artifact: mdf4parser-aarch64-linux-gnu
 
+    if: vars.PARSER_PACKAGE_TAG != ''
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
 
@@ -29,21 +31,23 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y cmake ninja-build protobuf-compiler libprotobuf-dev libabsl-dev zlib1g-dev
 
-      - name: Download release artifacts
+      - name: Download selected complete package
         env:
           GH_TOKEN: ${{ github.token }}
+          PACKAGE_TAG: ${{ vars.PARSER_PACKAGE_TAG }}
         run: |
-          mkdir -p lib
-          gh release download --repo dnbmch/mdf4-parser-lib --pattern "${{ matrix.artifact }}*.tar.gz" --dir .
-          tar xzf ${{ matrix.artifact }}*.tar.gz -C lib/
+          mkdir -p package
+          gh release download "$PACKAGE_TAG" --repo dnbmch/mdf4-parser-lib --pattern "${{ matrix.artifact }}-${PACKAGE_TAG}.tar.gz" --dir .
+          tar xzf ${{ matrix.artifact }}-${PACKAGE_TAG}.tar.gz -C package/
 
       - name: Configure
-        run: cmake -B build -G Ninja -DMDF4_LIB_DIR=lib
+        run: cmake -B build -G Ninja -Dmdf4parser_DIR="${{ github.workspace }}/package/lib/cmake/mdf4parser"
 
       - name: Build examples
         run: cmake --build build
 
   windows-mingw:
+    if: vars.PARSER_PACKAGE_TAG != ''
     name: Windows MinGW
     runs-on: windows-latest
     defaults:
@@ -64,22 +68,24 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      - name: Download release artifacts
+      - name: Download selected complete package
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          PACKAGE_TAG: ${{ vars.PARSER_PACKAGE_TAG }}
         run: |
-          mkdir -p lib
-          gh release download --repo dnbmch/mdf4-parser-lib --pattern "mdf4parser-x86_64-windows-mingw*.tar.gz" --dir .
-          tar xzf mdf4parser-x86_64-windows-mingw*.tar.gz -C lib/
+          mkdir -p package
+          gh release download "$PACKAGE_TAG" --repo dnbmch/mdf4-parser-lib --pattern "mdf4parser-x86_64-windows-mingw-${PACKAGE_TAG}.tar.gz" --dir .
+          tar xzf mdf4parser-x86_64-windows-mingw-${PACKAGE_TAG}.tar.gz -C package/
 
       - name: Configure
-        run: cmake -B build -G Ninja -DMDF4_LIB_DIR=lib
+        run: cmake -B build -G Ninja -Dmdf4parser_DIR="${{ github.workspace }}/package/lib/cmake/mdf4parser"
 
       - name: Build examples
         run: cmake --build build
 
   windows-msvc:
+    if: vars.PARSER_PACKAGE_TAG != ''
     name: Windows MSVC
     runs-on: windows-latest
     env:
@@ -99,14 +105,15 @@ jobs:
       - name: Install protobuf via vcpkg
         run: vcpkg install protobuf zlib
 
-      - name: Download release artifacts
+      - name: Download selected complete package
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          PACKAGE_TAG: ${{ vars.PARSER_PACKAGE_TAG }}
         run: |
-          mkdir -p lib
-          gh release download --repo dnbmch/mdf4-parser-lib --pattern "mdf4parser-x86_64-windows-msvc*.tar.gz" --dir .
-          tar xzf mdf4parser-x86_64-windows-msvc*.tar.gz -C lib/
+          mkdir -p package
+          gh release download "$PACKAGE_TAG" --repo dnbmch/mdf4-parser-lib --pattern "mdf4parser-x86_64-windows-msvc-${PACKAGE_TAG}.tar.gz" --dir .
+          tar xzf mdf4parser-x86_64-windows-msvc-${PACKAGE_TAG}.tar.gz -C package/
 
       - name: Configure
         run: >
@@ -114,7 +121,7 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
           -DVCPKG_TARGET_TRIPLET=x64-windows-static
           -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
-          -DMDF4_LIB_DIR=lib
+          -Dmdf4parser_DIR="${{ github.workspace }}/package/lib/cmake/mdf4parser"
 
       - name: Build examples
         run: cmake --build build --config Release

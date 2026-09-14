@@ -15,9 +15,21 @@ Prebuilt static libraries are available on the
 | `mdf4parser-x86_64-linux-gnu` | Linux x86_64 (.a) |
 | `mdf4parser-aarch64-linux-gnu` | Linux ARM64 (.a) |
 | `mdf4parser-x86_64-windows-msvc` | Windows MSVC (.lib) |
-| `mdf4parser-headers` | Public headers and proto files |
 
 ## Quick Start
+
+Each platform archive contains a complete install prefix: matching public and
+protobuf-generated headers, the static library, schemas, CMake package files and
+`share/mdf4parser/build-info.json`. Set `CMAKE_PREFIX_PATH` to the extracted prefix;
+CMake resolves `mdf4parser::mdf4parser` through `find_package(mdf4parser CONFIG REQUIRED)`.
+Use a compatible compiler/runtime and the producer's exact protobuf version. Dependency
+libraries are supplied separately by your toolchain. Do not regenerate C++ headers
+against a prebuilt binary. Historical split archives do not satisfy this contract;
+choose a complete package from a deliberate future release or a local producer install.
+
+Package CI runs when repository variable `PARSER_PACKAGE_TAG` names an existing
+complete-package release, and supports manual dispatch. No tag is selected by default.
+
 
 ```bash
 # 1. Clone this repo
@@ -25,12 +37,13 @@ git clone https://github.com/dnbmch/mdf4-parser-lib.git
 cd mdf4-parser-lib
 
 # 2. Download and extract the library for your platform
-#    (from the Releases page, extract into lib/)
-mkdir -p lib
-tar xzf mdf4parser-x86_64-linux-gnu-v0.1.0.tar.gz -C lib/
+#    (from the Releases page, extract into package/)
+TAG=... # Select an existing complete-package release tag.
+mkdir -p package
+tar xzf mdf4parser-x86_64-linux-gnu-${TAG}.tar.gz -C package/
 
 # 3. Build the examples
-cmake -B build -DMDF4_LIB_DIR=lib
+cmake -B build -DCMAKE_PREFIX_PATH=/absolute/path/to/package
 cmake --build build
 
 # 4. Run
