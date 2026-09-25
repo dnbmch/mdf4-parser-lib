@@ -1,6 +1,8 @@
 /*
  *  mdf4-parser basic example.
- *  Reads an MDF4 measurement file's structure into protobuf, prints a summary.
+ *  Opens an MDF4 measurement file once, prints its structure from the protobuf
+ *  metadata, then reads the first plottable channel's samples from that same
+ *  opened source.
  *
  *  Build:
  *    cd examples/basic
@@ -15,16 +17,17 @@
 #include <iostream>
 #include <string>
 
-#include "mdf4/extract.h"
+#include "mdf4/reader.h"
 
 using namespace std;
 
 int main(int argc, char* argv[]) {
-    // extractFile is total — it never fails, it reports. An absent path yields
-    // the empty document, so the example runs without a measurement file.
+    // Opening never fails, it reports. An absent path yields the empty
+    // document, so the example runs without a measurement file.
     const string path = argc >= 2 ? argv[1] : string();
 
-    mdf4::File file = mdf4::extract::extractFile(path);
+    mdf4::Reader reader(path);
+    const mdf4::File& file = reader.metadata();
 
     cout << "MDF4: " << (path.empty() ? "(no file)" : path) << endl;
     if (!path.empty())
@@ -50,7 +53,27 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Samples come back separately: decodeChannel(path, group, channel).
+    // Samples come from the same reader, addressed by the metadata's indices.
+    for (int g = 0; reader.ready() && g < file.groups_size(); ++g) {
+        const mdf4::ChannelGroup& group = file.groups(g);
+        int c = 0;
+        while (c < group.channels_size() &&
+               (group.channels(c).is_master() || !group.channels(c).decodable()))
+            ++c;
+        if (c == group.channels_size())
+            continue;
+        const mdf4::ReadResult samples = reader.read(uint32_t(g), uint32_t(c));
+        cout << "Read " << group.channels(c).name() << ": ";
+        if (!samples.ok)
+            cout << "failed at " << samples.location << ": " << samples.message << endl;
+        else if (samples.series.value.empty())
+            cout << "no samples" << endl;
+        else
+            cout << samples.series.value.size() << " samples, first " << samples.series.value.front()
+                 << " at " << samples.series.time.front() << endl;
+        break;
+    }
+
     cout << "Diagnostics: " << file.diagnostics_size() << endl;
     for (const auto& diag : file.diagnostics())
         cout << "  [" << mdf4::Severity_Name(diag.severity()) << "] "

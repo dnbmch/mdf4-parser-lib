@@ -71,7 +71,7 @@ message Channel {
   Conversion conversion = 13;
   uint64 sample_count = 14;
   bool is_master = 15;
-  bool decodable = 16;               // decodeChannel returns samples for this channel
+  bool decodable = 16;               // Reader::read returns samples for this channel
   string not_decodable_reason = 17;
 }
 
@@ -81,8 +81,8 @@ message ChannelGroup {
   string comment = 3;
   // Clamped to the records actually present, except in an unsorted data group:
   // there the records are only countable by streaming the data block, which
-  // extractFile never does, so the stated count travels as written and
-  // decodeChannel may return a shorter series.
+  // indexing never does, so the stated count travels as written and
+  // Reader::read may return a shorter series.
   uint64 cycle_count = 4;
   uint32 data_bytes = 5;
   uint32 inval_bytes = 6;            // counted in the record stride, never evaluated
@@ -100,10 +100,10 @@ message FileHistory {
   string comment = 2;
 }
 
-// Root of the metadata document produced by mdf4::extract::extractFile.
+// Root of the metadata document: mdf4::Reader::metadata(), or extractFile.
 // `groups` is the flattened block walk: data groups in dg_dg_next order, channel
 // groups within each in cg_cg_next order, channels in cn_cn_next order. The same
-// walk indexes mdf4::extract::decodeChannel. Sample data never travels here.
+// walk indexes mdf4::Reader::read. Sample data never travels here.
 message File {
   repeated Diagnostic diagnostics = 1;
   string version = 2;                // id_vers, e.g. "4.20"

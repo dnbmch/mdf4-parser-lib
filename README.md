@@ -54,29 +54,39 @@ cmake --build build
 
 | Directory | Description |
 |-----------|-------------|
-| `include/` | Public C++ headers (`extract.h`, `series.h`) |
+| `include/` | Public C++ headers (`reader.h`, `extract.h`, `series.h`) |
 | `proto/` | Protobuf schema files (`.proto`) for multi-language binding generation |
 | `examples/` | Example applications (basic summary, JSON export) |
 
 ## Integration
 
 The surface is a hybrid: protobuf for the metadata document, plain C++ for bulk
-samples. Both calls are stateless — the file is re-opened by path, so they are
-usable from worker threads with no shared handle.
+samples. One `mdf4::Reader` opens and indexes the file once; its metadata and
+every read describe that opened file. A reader serves one thread at a time; its
+metadata may be inspected from any thread.
 
 ```cpp
-#include "mdf4/extract.h"
+#include "mdf4/reader.h"
 
 // Structure only — block headers, no sample data read.
-mdf4::File file = mdf4::extract::extractFile("path/to/file.mf4");
+mdf4::Reader reader("path/to/file.mf4");
+const mdf4::File& file = reader.metadata();
 
 for (const auto& diag : file.diagnostics()) {
     // Anything the reader had to guess, default, or drop.
 }
 
 // Samples on demand, converted to physical doubles against the time master.
-mdf4::Series series = mdf4::extract::decodeChannel("path/to/file.mf4", 0, 1);
+mdf4::ReadResult samples = reader.read(0, 1);
+if (samples.ok) {
+    // samples.series.time / samples.series.value, equal length, possibly empty
+} else {
+    // samples.message, and samples.location naming the channel
+}
 ```
+
+`mdf4::extract::extractFile(path)` (`mdf4/extract.h`) returns the metadata
+document alone.
 
 ## Build Requirements
 

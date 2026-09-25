@@ -24,7 +24,8 @@
 using namespace std;
 
 int main(int argc, char* argv[]) {
-    // extractFile is total — an absent path yields the empty document.
+    // extractFile never fails, it reports; an absent path yields the empty
+    // document. Metadata only: samples are read through mdf4::Reader.
     const string path = argc >= 2 ? argv[1] : string();
 
     mdf4::File file = mdf4::extract::extractFile(path);
