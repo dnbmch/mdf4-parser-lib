@@ -30,6 +30,8 @@ int main(int argc, char* argv[]) {
     const mdf4::File& file = reader.metadata();
 
     cout << "MDF4: " << (path.empty() ? "(no file)" : path) << endl;
+    if (!reader.ready())
+        cout << "Not ready: " << reader.openOutcome().message << endl;
     if (!path.empty())
         cout << "Version: " << file.version() << " (" << file.version_num() << ")"
              << (file.finalized() ? ", finalized" : ", unfinalized") << endl;
@@ -62,15 +64,21 @@ int main(int argc, char* argv[]) {
             ++c;
         if (c == group.channels_size())
             continue;
+        // A read is bounded by the reader's output allowance; a longer channel
+        // is refused explicitly and stays readable in windows or by scan().
         const mdf4::ReadResult samples = reader.read(uint32_t(g), uint32_t(c));
         cout << "Read " << group.channels(c).name() << ": ";
-        if (!samples.ok)
-            cout << "failed at " << samples.location << ": " << samples.message << endl;
+        if (samples.outcome.status != mdf4::Status::Ok)
+            cout << "not read at " << samples.outcome.location << ": " << samples.outcome.message << endl;
         else if (samples.series.value.empty())
             cout << "no samples" << endl;
-        else
+        else {
             cout << samples.series.value.size() << " samples, first " << samples.series.value.front()
-                 << " at " << samples.series.time.front() << endl;
+                 << " at " << samples.series.time.front();
+            if (samples.coverage == mdf4::Coverage::Short)
+                cout << " (short: " << samples.outcome.message << ")";
+            cout << endl;
+        }
         break;
     }
 

@@ -62,8 +62,10 @@ cmake --build build
 
 The surface is a hybrid: protobuf for the metadata document, plain C++ for bulk
 samples. One `mdf4::Reader` opens and indexes the file once; its metadata and
-every read describe that opened file. A reader serves one thread at a time; its
-metadata may be inspected from any thread.
+every operation describe that opened file. A reader serves one operation at a
+time; its metadata, opening outcome and time axes may be inspected from any
+thread. `mdf4::Limits`, fixed at construction, bounds the opening, each
+operation's scratch and a read's output; a refusal is an explicit outcome.
 
 ```cpp
 #include "mdf4/reader.h"
@@ -71,18 +73,29 @@ metadata may be inspected from any thread.
 // Structure only — block headers, no sample data read.
 mdf4::Reader reader("path/to/file.mf4");
 const mdf4::File& file = reader.metadata();
+if (!reader.ready()) {
+    // reader.openOutcome().message; the diagnostics say what was found
+}
 
 for (const auto& diag : file.diagnostics()) {
     // Anything the reader had to guess, default, or drop.
 }
 
-// Samples on demand, converted to physical doubles against the time master.
+// Samples on demand, converted to physical doubles against the time master
+// that reader.axis(0) names.
 mdf4::ReadResult samples = reader.read(0, 1);
-if (samples.ok) {
-    // samples.series.time / samples.series.value, equal length, possibly empty
+if (samples.outcome.status == mdf4::Status::Ok) {
+    // samples.series.time / samples.series.value, equal length, possibly empty;
+    // samples.coverage is Short when the source ended before the request
 } else {
-    // samples.message, and samples.location naming the channel
+    // samples.outcome.status and .message, .location naming the channel
 }
+
+// A whole channel of any length, in bounded chunks with absolute indices.
+reader.scan(0, 1, 0, UINT64_MAX, {}, [](const mdf4::SampleChunk& chunk) {
+    // chunk.firstSample, chunk.time[i], chunk.value[i] for i < chunk.size
+    return mdf4::Visit::Continue;
+});
 ```
 
 `mdf4::extract::extractFile(path)` (`mdf4/extract.h`) returns the metadata
