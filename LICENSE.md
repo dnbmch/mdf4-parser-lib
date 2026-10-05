@@ -40,3 +40,5 @@ kb@danube-mechatronics.com
 ## Third-Party Dependencies
 
 This project uses Protocol Buffers (protobuf), which is licensed under the BSD 3-Clause License by Google LLC.
+
+This project uses zlib, which is licensed under the zlib License by Jean-loup Gailly and Mark Adler.
