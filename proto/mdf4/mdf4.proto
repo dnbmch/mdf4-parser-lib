@@ -27,6 +27,10 @@ enum ConversionKind {
   CONVERSION_OTHER = 7;
   ALGEBRAIC = 8;
   TAB_RANGE = 9;
+  VALUE_RANGE_TO_TEXT = 10;
+  TEXT_TO_VALUE = 11;
+  TEXT_TO_TEXT = 12;
+  BITFIELD_TEXT = 13;
 }
 
 // How a channel group's records are stored.
@@ -39,20 +43,44 @@ enum StorageLayout {
   STORAGE_OTHER = 5;     // a storage shape this reader does not decode
 }
 
-// One entry of a value-to-text conversion table.
+// One entry of a value-to-text conversion table, or of a text-to-value table,
+// whose key is the text.
 message TextEntry {
   double value = 1;
+  string text = 2;
+}
+
+// One range of a value-range-to-text table. Its link is a text, a scale
+// conversion (`scale`, no text) or NIL (neither).
+message RangeTextEntry {
+  double key_min = 1;
+  double key_max = 2;
+  string text = 3;
+  bool scale = 4;
+}
+
+// One entry of a text-to-text table. An empty `text` is also what a NIL
+// output link gives, which returns the input string unchanged.
+message TextPair {
+  string key = 1;
   string text = 2;
 }
 
 message Conversion {
   ConversionKind kind = 1;
   uint32 cc_type = 2;                // raw cc_type, including families we do not apply
-  repeated double params = 3;        // cc_val for the numeric families
-  repeated TextEntry entries = 4;    // value-to-text table
-  string default_text = 5;
+  repeated double params = 3;        // cc_val for the numeric families; text to value: the values, then the default value
+  repeated TextEntry entries = 4;    // value-to-text table; text-to-value table
+  string default_text = 5;           // value-to-text, value-range-to-text and text-to-text default
   string unit = 6;
   string formula = 7;                // algebraic formula text, verbatim
+  repeated RangeTextEntry ranges = 8;    // value-range-to-text table
+  repeated TextPair translations = 9;    // text-to-text table
+  repeated uint64 bitmasks = 10;         // bitfield text table: cc_val, read as UINT64
+  // Beside each bitmask: the cc_type of the conversion its link names, 255 for
+  // a NIL link or one that names no readable CCBLOCK.
+  repeated uint32 bitmask_cc_types = 11;
+  bool default_scale = 12;               // value-range-to-text: the default link is a scale conversion
 }
 
 message Channel {
