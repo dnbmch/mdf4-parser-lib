@@ -1,8 +1,8 @@
 /*
  *  mdf4-parser basic example.
  *  Opens an MDF4 measurement file once, prints its structure from the protobuf
- *  metadata, then reads the first plottable channel's samples from that same
- *  opened source.
+ *  metadata, then reads the first decodable channel's samples, values or
+ *  texts, from that same opened source.
  *
  *  Build:
  *    cd examples/basic
@@ -65,6 +65,19 @@ int main(int argc, char* argv[]) {
             ++c;
         if (c == group.channels_size())
             continue;
+        // A text channel's samples are UTF-8 texts, read through readText().
+        if (group.channels(c).textual()) {
+            const mdf4::ReadTextResult texts = reader.readText(uint32_t(g), uint32_t(c));
+            cout << "Read " << group.channels(c).name() << ": ";
+            if (texts.outcome.status != mdf4::Status::Ok)
+                cout << "not read at " << texts.outcome.location << ": " << texts.outcome.message << endl;
+            else if (texts.series.text.empty())
+                cout << "no samples" << endl;
+            else
+                cout << texts.series.text.size() << " texts, first \"" << texts.series.text.front()
+                     << "\" at " << texts.series.time.front() << endl;
+            break;
+        }
         // A read is bounded by the reader's output allowance; a longer channel
         // is refused explicitly and stays readable in windows or by scan().
         const mdf4::ReadResult samples = reader.read(uint32_t(g), uint32_t(c));

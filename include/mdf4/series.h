@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <vector>
 
 namespace mdf4 {
@@ -10,6 +11,12 @@ namespace mdf4 {
 struct Series {
     std::vector<double> time;
     std::vector<double> value;
+};
+
+// One decoded text channel: UTF-8 texts against their time master.
+struct TextSeries {
+    std::vector<double> time;
+    std::vector<std::string> text;
 };
 
 } // namespace mdf4

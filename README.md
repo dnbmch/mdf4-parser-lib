@@ -96,6 +96,13 @@ reader.scan(0, 1, 0, UINT64_MAX, {}, [](const mdf4::SampleChunk& chunk) {
     // chunk.firstSample, chunk.time[i], chunk.value[i] for i < chunk.size
     return mdf4::Visit::Continue;
 });
+
+// A string channel (Channel.textual) delivers UTF-8 texts instead, through
+// readText() and scanText(); an invalid sample's text is empty.
+mdf4::ReadTextResult texts = reader.readText(0, 2);
+if (texts.outcome.status == mdf4::Status::Ok) {
+    // texts.series.time / texts.series.text, equal length
+}
 ```
 
 `mdf4::extract::extractFile(path)` (`mdf4/extract.h`) returns the metadata

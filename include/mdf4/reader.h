@@ -7,6 +7,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "mdf4/mdf4.pb.h"
 #include "mdf4/series.h"
@@ -23,15 +24,23 @@ struct Limits {
     std::uint64_t openingBytes = std::uint64_t{1} << 30;
     // One operation's decode scratch: record buffers, raw input, inflate state
     // and output slices, a transposed fragment and the visitor's chunk arrays,
-    // for the target and any remote master stream together.
+    // for the target, any remote master stream and a VLSD channel's signal
+    // stream together, and a text operation's arenas.
     std::uint64_t scratchBytes = std::uint64_t{64} << 20;
-    // read(): owned output samples, a time and a value double each.
+    // read() and readText(): owned output samples, a time and a value double
+    // each, or a time and a text.
     std::uint64_t readSamples = std::uint64_t{4} << 20;
     // Work granularity: plain data Bytes per unit of reading, inflating,
     // un-transposing, cutting or skipping records, one cancellation and progress
     // checkpoint each; samples per visitor chunk.
     std::uint64_t sliceBytes = std::uint64_t{1} << 20;
     std::uint64_t chunkSamples = std::uint64_t{1} << 16;
+    // One text operation's arena, within scratchBytes: the UTF-8 texts of the
+    // chunk being filled. A text conversion stages each input text in a second
+    // arena of this size.
+    std::uint64_t textBytes = std::uint64_t{16} << 20;
+    // readText(): owned text Bytes, the samples' UTF-8 lengths together.
+    std::uint64_t readTextBytes = std::uint64_t{256} << 20;
 };
 
 enum class Status : std::uint8_t {
@@ -50,7 +59,8 @@ struct Outcome {
     std::string location;               // Diagnostic.location form; empty when none
     const char* message = "not run";    // static text, reportable without memory
     Resource resource = Resource::None; // ResourceLimit only
-    std::uint64_t required = 0;         // Bytes (samples for Output); 0 if unknown
+    // Bytes, except samples for a Limits::readSamples refusal; 0 if unknown.
+    std::uint64_t required = 0;
     std::uint64_t limit = 0;            // the refusing allowance, same unit
 };
 
@@ -70,12 +80,24 @@ struct SampleChunk {
 enum class Visit : std::uint8_t { Continue, Cancel, ResourceLimit };
 using Visitor = std::function<Visit(const SampleChunk&)>;
 
+// Borrowed equal-length arrays, valid only during the visitor call; text is
+// UTF-8 (a UTF-8 source passes unvalidated), an invalid sample's is empty.
+struct TextChunk {
+    std::uint64_t firstSample = 0;          // absolute occurrence index of element 0
+    const double* time = nullptr;           // the group's axis, see Reader::axis
+    const std::string_view* text = nullptr;
+    std::size_t size = 0;
+};
+
+using TextVisitor = std::function<Visit(const TextChunk&)>;
+
 // The caller's control of one operation, valid for the operation's duration.
 struct Control {
     const std::atomic<bool>* cancel = nullptr;  // set from any thread
     // On the operation's thread at checkpoints: plain data Bytes traversed and
-    // the most it will traverse, target and master streams together. `total` is
-    // fixed at the start; `done` never decreases and may end below `total`.
+    // the most it will traverse, target, master and signal streams together.
+    // `total` is fixed at the start; `done` never decreases, never passes
+    // `total` and may end below it.
     std::function<void(std::uint64_t done, std::uint64_t total)> progress;
 };
 
@@ -85,7 +107,7 @@ struct ScanResult {
     std::uint64_t firstSample = 0;   // request start, clamped to the cycle count
     std::uint64_t sampleCount = 0;   // request length after clamping
     std::uint64_t samplesRead = 0;   // delivered in order from firstSample
-    std::uint64_t invalidSamples = 0; // of samplesRead, the invalid ones, delivered as NaN
+    std::uint64_t invalidSamples = 0; // of samplesRead, the invalid ones, delivered as NaN or as an empty text
     std::uint64_t bytesRead = 0;     // stored Bytes this operation read from the file
     std::uint64_t bytesInflated = 0; // Bytes this operation's inflation produced
 };
@@ -94,6 +116,11 @@ struct ScanResult {
 // `value` then have samplesRead elements each.
 struct ReadResult : ScanResult {
     Series series;
+};
+
+// readText()'s counterpart: only an Ok outcome carries texts, samplesRead each.
+struct ReadTextResult : ScanResult {
+    TextSeries series;
 };
 
 enum class AxisKind : std::uint8_t {
@@ -125,14 +152,17 @@ struct Axis {
 //
 // `group` and `channel` index File.groups. Every operation clamps its request
 // to the channel's sample count; an empty clamped request of a decodable
-// channel is Ok and Complete with zero samples. A sample the file marks invalid
-// (its invalidation bit set in row storage, or the channel's all-values-invalid
-// flag) is delivered as NaN at its time and counted in invalidSamples; column
-// storage's invalidation bits are not evaluated. An unready reader, an unknown
-// group or channel, a channel outside the read set or unreadable data is an
-// Error; a source whose length or write time changed since opening, checked
-// before and after the traversal, is SourceChanged and needs a new Reader. Those
-// checks do not detect every same-size edit.
+// channel is Ok and Complete with zero samples. A textual channel
+// (Channel.textual) delivers UTF-8 texts through scanText() and readText(),
+// every other decodable channel values through scan() and read(); each pair
+// refuses the other kind with an Error. A sample the file marks invalid (its
+// invalidation bit set in row storage, or the channel's all-values-invalid
+// flag) is delivered at its time as NaN, or as an empty text, and counted in
+// invalidSamples; column storage's invalidation bits are not evaluated. An
+// unready reader, an unknown group or channel, a channel outside the read set
+// or unreadable data is an Error; a source whose length or write time changed
+// since opening, checked before and after the traversal, is SourceChanged and
+// needs a new Reader. Those checks do not detect every same-size edit.
 class Reader {
 public:
     explicit Reader(const std::string& path, const Limits& limits = Limits{},
@@ -163,6 +193,20 @@ public:
     ReadResult read(std::uint32_t group, std::uint32_t channel, std::uint64_t firstSample = 0,
                     std::uint64_t sampleCount = std::numeric_limits<std::uint64_t>::max(),
                     const Control& control = {}) noexcept;
+
+    // scanText() is scan() for a textual channel, except that a chunk also
+    // closes early when its next text would not fit Limits::textBytes, so it
+    // may hold fewer than chunkSamples samples. A single text larger than that
+    // arena is a ResourceLimit (Resource::Scratch).
+    ScanResult scanText(std::uint32_t group, std::uint32_t channel, std::uint64_t firstSample,
+                        std::uint64_t sampleCount, const Control& control,
+                        const TextVisitor& visitor) noexcept;
+    // readText() admits the clamped request against Limits::readSamples, then
+    // collects the same traversal and refuses the sample whose text would pass
+    // Limits::readTextBytes (Resource::Output, in Bytes), discarding the texts.
+    ReadTextResult readText(std::uint32_t group, std::uint32_t channel, std::uint64_t firstSample = 0,
+                            std::uint64_t sampleCount = std::numeric_limits<std::uint64_t>::max(),
+                            const Control& control = {}) noexcept;
 
 private:
     struct Source;

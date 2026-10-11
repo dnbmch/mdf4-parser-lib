@@ -2,8 +2,9 @@ syntax = "proto3";
 package mdf4;
 import "mdf4/common.proto";
 
-// Raw signal type of a channel as stored in the record. Both Byte orders of the
-// numeric families are decoded; everything else is described but not read.
+// Raw signal type of a channel as stored in the record. The numeric families
+// are decoded in both Byte orders and the strings as UTF-8 text; everything else
+// is described but not read.
 enum DataType {
   DATA_TYPE_UNSPECIFIED = 0;
   UINT_LE = 1;
@@ -100,10 +101,10 @@ message Channel {
   Conversion conversion = 13;
   uint64 sample_count = 14;
   bool is_master = 15;
-  bool decodable = 16;               // Reader::read returns samples for this channel
+  bool decodable = 16;               // Reader::read, or Reader::readText when textual, returns samples for this channel
   string not_decodable_reason = 17;
-  bool all_invalid = 18;             // all values invalid (cn_flags bit 0): every sample is delivered as NaN
-  bool invalidation_bit = 19;        // invalidation bit evaluated (cn_flags bit 1): a set bit delivers its sample as NaN
+  bool all_invalid = 18;             // all values invalid (cn_flags bit 0): every sample is delivered as NaN, or as an empty text
+  bool invalidation_bit = 19;        // invalidation bit evaluated (cn_flags bit 1): a set bit delivers its sample as NaN, or as an empty text
   uint32 inval_bit_pos = 20;         // with invalidation_bit: cn_inval_bit_pos, Byte pos >> 3 of the invalidation Bytes, bit pos & 7
   bool textual = 21;                 // samples are text: Reader::readText / scanText deliver them, read / scan refuse. A string channel under a text-to-value conversion is numeric
   uint32 size_channel = 22;          // MLSD (cn_type 5), decodable: index in this group's channels of the size channel
