@@ -158,7 +158,8 @@ struct Axis {
 // refuses the other kind with an Error. A sample the file marks invalid (its
 // invalidation bit set in row storage, or the channel's all-values-invalid
 // flag) is delivered at its time as NaN, or as an empty text, and counted in
-// invalidSamples; column storage's invalidation bits are not evaluated. An
+// invalidSamples, and so is an MLSD sample whose size channel's sample is
+// marked invalid; column storage's invalidation bits are not evaluated. An
 // unready reader, an unknown group or channel, a channel outside the read set
 // or unreadable data is an Error; a source whose length or write time changed
 // since opening, checked before and after the traversal, is SourceChanged and
