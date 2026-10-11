@@ -85,6 +85,7 @@ struct ScanResult {
     std::uint64_t firstSample = 0;   // request start, clamped to the cycle count
     std::uint64_t sampleCount = 0;   // request length after clamping
     std::uint64_t samplesRead = 0;   // delivered in order from firstSample
+    std::uint64_t invalidSamples = 0; // of samplesRead, the invalid ones, delivered as NaN
     std::uint64_t bytesRead = 0;     // stored Bytes this operation read from the file
     std::uint64_t bytesInflated = 0; // Bytes this operation's inflation produced
 };
@@ -124,7 +125,10 @@ struct Axis {
 //
 // `group` and `channel` index File.groups. Every operation clamps its request
 // to the channel's sample count; an empty clamped request of a decodable
-// channel is Ok and Complete with zero samples. An unready reader, an unknown
+// channel is Ok and Complete with zero samples. A sample the file marks invalid
+// (its invalidation bit set in row storage, or the channel's all-values-invalid
+// flag) is delivered as NaN at its time and counted in invalidSamples; column
+// storage's invalidation bits are not evaluated. An unready reader, an unknown
 // group or channel, a channel outside the read set or unreadable data is an
 // Error; a source whose length or write time changed since opening, checked
 // before and after the traversal, is SourceChanged and needs a new Reader. Those

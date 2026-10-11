@@ -101,6 +101,9 @@ message Channel {
   bool is_master = 15;
   bool decodable = 16;               // Reader::read returns samples for this channel
   string not_decodable_reason = 17;
+  bool all_invalid = 18;             // all values invalid (cn_flags bit 0): every sample is delivered as NaN
+  bool invalidation_bit = 19;        // invalidation bit evaluated (cn_flags bit 1): a set bit delivers its sample as NaN
+  uint32 inval_bit_pos = 20;         // with invalidation_bit: cn_inval_bit_pos, Byte pos >> 3 of the invalidation Bytes, bit pos & 7
 }
 
 message ChannelGroup {
@@ -113,7 +116,7 @@ message ChannelGroup {
   // Reader::read may return a shorter series.
   uint64 cycle_count = 4;
   uint32 data_bytes = 5;
-  uint32 inval_bytes = 6;            // counted in the record stride, never evaluated
+  uint32 inval_bytes = 6;            // Bytes of invalidation bits per record, evaluated in row storage
   StorageLayout storage = 7;
   bool compressed = 8;               // at least one fragment is a DZBLOCK
   bool remote_master = 9;            // cg_flags bit 3
