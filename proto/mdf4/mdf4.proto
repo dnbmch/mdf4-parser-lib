@@ -9,10 +9,11 @@ enum DataType {
   UINT_LE = 1;
   SINT_LE = 2;
   FLOAT_LE = 3;
-  DATA_TYPE_OTHER = 4;   // string, byte array, MIME, CANopen, complex
+  DATA_TYPE_OTHER = 4;   // byte array, MIME, CANopen, complex
   UINT_BE = 5;
   SINT_BE = 6;
   FLOAT_BE = 7;
+  STRING = 8;            // cn_data_type 6-9: text; raw_data_type names the encoding
 }
 
 // Conversion family mapping raw values to physical values.
@@ -104,6 +105,8 @@ message Channel {
   bool all_invalid = 18;             // all values invalid (cn_flags bit 0): every sample is delivered as NaN
   bool invalidation_bit = 19;        // invalidation bit evaluated (cn_flags bit 1): a set bit delivers its sample as NaN
   uint32 inval_bit_pos = 20;         // with invalidation_bit: cn_inval_bit_pos, Byte pos >> 3 of the invalidation Bytes, bit pos & 7
+  bool textual = 21;                 // samples are text: Reader::readText / scanText deliver them, read / scan refuse. A string channel under a text-to-value conversion is numeric
+  uint32 size_channel = 22;          // MLSD (cn_type 5), decodable: index in this group's channels of the size channel
 }
 
 message ChannelGroup {
