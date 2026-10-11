@@ -11,7 +11,7 @@
  *
  *  Run:
  *    ./build/mdf4_basic path/to/file.mf4
- *    ./build/mdf4_basic                    # empty document
+ *    ./build/mdf4_basic                    # no file: one DROPPED diagnostic
  */
 
 #include <iostream>
@@ -22,8 +22,9 @@
 using namespace std;
 
 int main(int argc, char* argv[]) {
-    // Opening never fails, it reports. An absent path yields the empty
-    // document, so the example runs without a measurement file.
+    // Opening never fails, it reports. An absent path yields a document with no
+    // structure and one DROPPED diagnostic, so the example runs without a
+    // measurement file.
     const string path = argc >= 2 ? argv[1] : string();
 
     mdf4::Reader reader(path);

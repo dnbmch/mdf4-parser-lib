@@ -24,8 +24,9 @@
 using namespace std;
 
 int main(int argc, char* argv[]) {
-    // extractFile never fails, it reports; an absent path yields the empty
-    // document. Metadata only: samples are read through mdf4::Reader.
+    // extractFile never fails, it reports; an absent path yields a document with
+    // no structure and one DROPPED diagnostic. Metadata only: samples are read
+    // through mdf4::Reader.
     const string path = argc >= 2 ? argv[1] : string();
 
     mdf4::File file = mdf4::extract::extractFile(path);
