@@ -1,8 +1,8 @@
 /*
  *  mdf4-parser basic example.
  *  Opens an MDF4 measurement file once, prints its structure from the protobuf
- *  metadata, then reads the first decodable channel's samples, values or
- *  texts, from that same opened source.
+ *  metadata, then reads the first decodable channel's samples, values, texts
+ *  or an array's elements, from that same opened source.
  *
  *  Build:
  *    cd examples/basic
@@ -65,6 +65,23 @@ int main(int argc, char* argv[]) {
             ++c;
         if (c == group.channels_size())
             continue;
+        // An array channel's sample is its whole array, read through
+        // readArray(): here sample 0, every element in row-major order.
+        if (group.channels(c).has_array()) {
+            const mdf4::ReadArrayResult array = reader.readArray(uint32_t(g), uint32_t(c), 0, 1);
+            cout << "Read " << group.channels(c).name() << ": ";
+            if (array.outcome.status != mdf4::Status::Ok)
+                cout << "not read at " << array.outcome.location << ": " << array.outcome.message << endl;
+            else if (array.series.time.empty())
+                cout << "no samples" << endl;
+            else {
+                cout << array.series.elements << " elements at " << array.series.time.front() << ":";
+                for (uint64_t k = 0; k < array.series.elements; ++k)
+                    cout << " " << array.series.value[size_t(k)];
+                cout << endl;
+            }
+            break;
+        }
         // A text channel's samples are UTF-8 texts, read through readText().
         if (group.channels(c).textual()) {
             const mdf4::ReadTextResult texts = reader.readText(uint32_t(g), uint32_t(c));

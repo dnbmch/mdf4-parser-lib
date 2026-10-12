@@ -103,6 +103,16 @@ mdf4::ReadTextResult texts = reader.readText(0, 2);
 if (texts.outcome.status == mdf4::Status::Ok) {
     // texts.series.time / texts.series.text, equal length
 }
+
+// An array channel (Channel.array) delivers each sample's whole array through
+// readArray() and scanArray(), its elements in row-major order; an element
+// window selects some of them.
+if (file.groups(0).channels(3).has_array()) {
+    // Sample 5's array: series.elements values at series.time[0].
+    mdf4::ReadArrayResult map = reader.readArray(0, 3, 5, 1);
+    // Element 7 over every sample: one value per sample.
+    mdf4::ReadArrayResult element = reader.readArray(0, 3, 0, UINT64_MAX, {7, 1});
+}
 ```
 
 `mdf4::extract::extractFile(path)` (`mdf4/extract.h`) returns the metadata

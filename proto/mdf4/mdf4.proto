@@ -85,6 +85,31 @@ message Conversion {
   bool default_scale = 12;               // value-range-to-text: the default link is a scale conversion
 }
 
+// One dimension of a channel array, outer first. Its axis is the fixed points
+// in `axis_values`, the axis channel at (axis_group, axis_channel) when
+// `axis_from_channel`, or with neither the zero-based element index (BS p.118).
+// Pairing (BS p.118, p.128-129): a one-cycle axis group without a master
+// applies to every array sample; otherwise use the axis sample with the latest
+// common-master value at or before the array sample's.
+message ArrayDimension {
+  uint64 size = 1;                  // N(d), ca_dim_size
+  repeated double axis_values = 2;  // fixed axis: `size` physical points
+  bool axis_from_channel = 3;
+  uint32 axis_group = 4;            // with axis_from_channel: index into File.groups
+  uint32 axis_channel = 5;          // with axis_from_channel: index into that group's channels, an array channel read through readArray: a scaling axis whose first `size` elements apply, or an interval axis of size + 1 borders
+}
+
+// cn_composition starts a chain of CN-template CABLOCKs (§4.19): every sample
+// of the channel is an array whose element k is row-major over `dimensions`, the
+// chain's concatenated N*(1...D*) outer first (BS p.130); for a single CABLOCK
+// this is the spec's line-oriented k (BS p.125).
+message ChannelArray {
+  uint32 ca_type = 1;                      // the first CABLOCK's: 0 array, 1 scaling axis, 2 look-up, 3 interval axis, 4 classification result
+  repeated ArrayDimension dimensions = 2;
+  uint64 element_count = 3;                // product of the sizes: values per sample
+  bool left_open = 4;                      // the first CABLOCK's ca_flags bit 7, meaningful only when ca_type is 3 (BS p.122): intervals ]a, b], else [a, b[; a classification result's interval semantics are each axis channel's own left_open
+}
+
 message Channel {
   string name = 1;
   string unit = 2;                   // the channel's unit, else the conversion's
@@ -99,15 +124,16 @@ message Channel {
   uint32 bit_offset = 11;            // LSB of the value inside the first Byte
   uint32 bit_count = 12;
   Conversion conversion = 13;
-  uint64 sample_count = 14;
+  uint64 sample_count = 14;          // the group's cycle count; an array channel's sample is its whole array
   bool is_master = 15;
-  bool decodable = 16;               // Reader::read, or Reader::readText when textual, returns samples for this channel
+  bool decodable = 16;               // its lane returns samples: Reader::readArray when `array` is set, readText when textual, else read
   string not_decodable_reason = 17;
   bool all_invalid = 18;             // all values invalid (cn_flags bit 0): every sample is delivered as NaN, or as an empty text
   bool invalidation_bit = 19;        // invalidation bit evaluated (cn_flags bit 1): a set bit delivers its sample as NaN, or as an empty text
   uint32 inval_bit_pos = 20;         // with invalidation_bit: cn_inval_bit_pos, Byte pos >> 3 of the invalidation Bytes, bit pos & 7
   bool textual = 21;                 // samples are text: Reader::readText / scanText deliver them, read / scan refuse. A string channel under a text-to-value conversion is numeric
   uint32 size_channel = 22;          // MLSD (cn_type 5), decodable: index in this group's channels of the size channel
+  ChannelArray array = 23;           // a decodable array channel's shape and axes; absent otherwise
 }
 
 message ChannelGroup {
@@ -138,7 +164,9 @@ message FileHistory {
 // Root of the metadata document: mdf4::Reader::metadata(), or extractFile.
 // `groups` is the flattened block walk: data groups in dg_dg_next order, channel
 // groups within each in cg_cg_next order, channels in cn_cn_next order. The same
-// walk indexes mdf4::Reader::read. Sample data never travels here.
+// walk indexes mdf4::Reader::read. An array channel is one channel; its elements
+// are addressed by scanArray / readArray's element window. Sample data never
+// travels here.
 message File {
   repeated Diagnostic diagnostics = 1;
   string version = 2;                // id_vers, e.g. "4.20"

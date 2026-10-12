@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -17,6 +18,15 @@ struct Series {
 struct TextSeries {
     std::vector<double> time;
     std::vector<std::string> text;
+};
+
+// One array channel's element window: per sample its time and `elements`
+// physical values in row-major element order, sample after sample.
+struct ArraySeries {
+    std::vector<double> time;
+    std::vector<double> value;          // time.size() x elements
+    std::uint64_t firstElement = 0;     // the clamped window
+    std::uint64_t elements = 0;
 };
 
 } // namespace mdf4
