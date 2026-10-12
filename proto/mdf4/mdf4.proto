@@ -128,9 +128,9 @@ message Channel {
   bool is_master = 15;
   bool decodable = 16;               // its lane returns samples: Reader::readArray when `array` is set, readText when textual, else read
   string not_decodable_reason = 17;
-  bool all_invalid = 18;             // all values invalid (cn_flags bit 0): every sample is delivered as NaN, or as an empty text
-  bool invalidation_bit = 19;        // invalidation bit evaluated (cn_flags bit 1): a set bit delivers its sample as NaN, or as an empty text
-  uint32 inval_bit_pos = 20;         // with invalidation_bit: cn_inval_bit_pos, Byte pos >> 3 of the invalidation Bytes, bit pos & 7
+  bool all_invalid = 18;             // all values invalid (cn_flags bit 0): every value is delivered as NaN, or as an empty text
+  bool invalidation_bit = 19;        // invalidation bit evaluated (cn_flags bit 1): a set bit delivers its value as NaN, or as an empty text; an array element has its own bit, inval_bit_pos plus its offset
+  uint32 inval_bit_pos = 20;         // with invalidation_bit: cn_inval_bit_pos, Byte pos >> 3 of the invalidation Bytes, bit pos & 7; an array's element 0
   bool textual = 21;                 // samples are text: Reader::readText / scanText deliver them, read / scan refuse. A string channel under a text-to-value conversion is numeric
   uint32 size_channel = 22;          // MLSD (cn_type 5), decodable: index in this group's channels of the size channel
   ChannelArray array = 23;           // a decodable array channel's shape and axes; absent otherwise
