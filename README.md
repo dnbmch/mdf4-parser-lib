@@ -104,6 +104,13 @@ if (texts.outcome.status == mdf4::Status::Ok) {
     // texts.series.time / texts.series.text, equal length
 }
 
+// A Byte channel (Channel.binary) delivers each sample's raw Bytes - a fixed
+// channel's whole width, an MLSD channel's valid Bytes, a VLSD channel's value -
+// through readBytes() and scanBytes(); an invalid sample's value is empty. A
+// compact structure's parent is one, its members listed right after it
+// (Channel.member_of).
+mdf4::ReadBytesResult frames = reader.readBytes(0, 4);
+
 // An array channel (Channel.array) delivers each sample's whole array through
 // readArray() and scanArray(), its elements in row-major order; an element
 // window selects some of them.

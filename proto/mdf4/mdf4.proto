@@ -3,18 +3,21 @@ package mdf4;
 import "mdf4/common.proto";
 
 // Raw signal type of a channel as stored in the record. The numeric families
-// are decoded in both Byte orders and the strings as UTF-8 text; everything else
-// is described but not read.
+// are decoded in both Byte orders, the strings as UTF-8 text and the Byte
+// arrays as their raw Bytes; everything else is described but not read.
 enum DataType {
   DATA_TYPE_UNSPECIFIED = 0;
   UINT_LE = 1;
   SINT_LE = 2;
   FLOAT_LE = 3;
-  DATA_TYPE_OTHER = 4;   // byte array, MIME, CANopen, complex
+  DATA_TYPE_OTHER = 4;   // CANopen date or time, complex
   UINT_BE = 5;
   SINT_BE = 6;
   FLOAT_BE = 7;
   STRING = 8;            // cn_data_type 6-9: text; raw_data_type names the encoding
+  BYTE_ARRAY = 9;        // cn_data_type 10: Bytes of unknown content, e.g. a compact structure
+  MIME_SAMPLE = 10;      // cn_data_type 11: the MIME type in `unit`
+  MIME_STREAM = 11;      // cn_data_type 12: the MIME type in `unit`
 }
 
 // Conversion family mapping raw values to physical values.
@@ -126,14 +129,18 @@ message Channel {
   Conversion conversion = 13;
   uint64 sample_count = 14;          // the group's cycle count; an array channel's sample is its whole array
   bool is_master = 15;
-  bool decodable = 16;               // its lane returns samples: Reader::readArray when `array` is set, readText when textual, else read
+  bool decodable = 16;               // its lane returns samples: Reader::readArray when `array` is set, readText when textual, readBytes when binary, else read
   string not_decodable_reason = 17;
-  bool all_invalid = 18;             // all values invalid (cn_flags bit 0): every value is delivered as NaN, or as an empty text
-  bool invalidation_bit = 19;        // invalidation bit evaluated (cn_flags bit 1): a set bit delivers its value as NaN, or as an empty text; an array element has its own bit, inval_bit_pos plus its offset
+  bool all_invalid = 18;             // all values invalid (cn_flags bit 0): every value is delivered as NaN, or as an empty text or Byte value
+  bool invalidation_bit = 19;        // invalidation bit evaluated (cn_flags bit 1): a set bit delivers its value as NaN, or as an empty text or Byte value; an array element has its own bit, inval_bit_pos plus its offset
   uint32 inval_bit_pos = 20;         // with invalidation_bit: cn_inval_bit_pos, Byte pos >> 3 of the invalidation Bytes, bit pos & 7; an array's element 0
-  bool textual = 21;                 // samples are text: Reader::readText / scanText deliver them, read / scan refuse. A string channel under a text-to-value conversion is numeric
+  bool textual = 21;                 // samples are text: Reader::readText / scanText deliver them, the other pairs refuse. A string channel under a text-to-value conversion is numeric
   uint32 size_channel = 22;          // MLSD (cn_type 5), decodable: index in this group's channels of the size channel
   ChannelArray array = 23;           // a decodable array channel's shape and axes; absent otherwise
+  bool binary = 24;                  // samples are raw Bytes: Reader::readBytes / scanBytes deliver them, the other pairs refuse
+  optional uint32 member_of = 25;    // a compact structure's member: index in this group's channels of its parent (BS §4.18.1)
+  bool bus_event = 26;               // cn_flags bit 10 (MDF Bus Logging)
+  uint32 source_bus_type = 27;       // si_bus_type of cn_si_source, as written: 0 none, 1 other, 2 CAN, 3 LIN, 4 MOST, 5 FlexRay, 6 K-Line, 7 Ethernet, 8 USB, 128 and above vendor-defined (BS p.81); 0 without a source
 }
 
 message ChannelGroup {
@@ -154,6 +161,10 @@ message ChannelGroup {
   bool master_resolved = 11;
   uint64 record_id = 12;             // cg_record_id, tagging this group's records when unsorted
   repeated Channel channels = 13;
+  bool bus_event = 14;               // cg_flags bit 1: the group holds a bus event channel (MDF Bus Logging)
+  bool plain_bus_event = 15;         // cg_flags bit 2, as written: no signal channels beside the bus events
+  string path_separator = 16;        // cg_path_separator as UTF-8, the separator of a composed name's parts (a member's from its parent's in bus logging); empty when 0, U+FFFD for a lone surrogate
+  uint32 source_bus_type = 17;       // si_bus_type of cg_si_acq_source, as Channel.source_bus_type
 }
 
 message FileHistory {
@@ -163,9 +174,11 @@ message FileHistory {
 
 // Root of the metadata document: mdf4::Reader::metadata(), or extractFile.
 // `groups` is the flattened block walk: data groups in dg_dg_next order, channel
-// groups within each in cg_cg_next order, channels in cn_cn_next order. The same
-// walk indexes mdf4::Reader::read. An array channel is one channel; its elements
-// are addressed by scanArray / readArray's element window. Sample data never
+// groups within each in cg_cg_next order, channels in cn_cn_next order, a
+// compact structure's members right after their parent in their own chain
+// order, depth first (Channel.member_of). The same walk indexes
+// mdf4::Reader::read. An array channel is one channel; its elements are
+// addressed by scanArray / readArray's element window. Sample data never
 // travels here.
 message File {
   repeated Diagnostic diagnostics = 1;

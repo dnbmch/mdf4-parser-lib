@@ -20,6 +20,12 @@ struct TextSeries {
     std::vector<std::string> text;
 };
 
+// One decoded Byte channel: each sample's raw Bytes against their time master.
+struct BytesSeries {
+    std::vector<double> time;
+    std::vector<std::string> value;
+};
+
 // One array channel's element window: per sample its time and `elements`
 // physical values in row-major element order, sample after sample.
 struct ArraySeries {

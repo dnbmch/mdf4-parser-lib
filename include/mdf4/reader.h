@@ -25,23 +25,24 @@ struct Limits {
     // One operation's decode scratch: record buffers, raw input, inflate state
     // and output slices, a transposed fragment and the visitor's chunk arrays,
     // for the target, any remote master stream and a VLSD channel's signal
-    // stream together, and a text operation's arenas.
+    // stream together, and a text or Byte operation's arenas.
     std::uint64_t scratchBytes = std::uint64_t{64} << 20;
-    // read(), readText() and readArray(): owned output values beside a time per
-    // sample: a number or a text per sample, and for readArray() a number per
-    // element of its window.
+    // read(), readText(), readBytes() and readArray(): owned output values
+    // beside a time per sample: a number, a text or a Byte value per sample,
+    // and for readArray() a number per element of its window.
     std::uint64_t readValues = std::uint64_t{4} << 20;
     // Work granularity: plain data Bytes per unit of reading, inflating,
     // un-transposing, cutting or skipping records, one cancellation and progress
     // checkpoint each; values per visitor chunk, in whole samples, at least one.
     std::uint64_t sliceBytes = std::uint64_t{1} << 20;
     std::uint64_t chunkValues = std::uint64_t{1} << 16;
-    // One text operation's arena, within scratchBytes: the UTF-8 texts of the
-    // chunk being filled. A text conversion stages each input text in a second
-    // arena of this size.
-    std::uint64_t textBytes = std::uint64_t{16} << 20;
-    // readText(): owned text Bytes, the samples' UTF-8 lengths together.
-    std::uint64_t readTextBytes = std::uint64_t{256} << 20;
+    // One text or Byte operation's arena, within scratchBytes: the UTF-8 texts
+    // or the raw Byte values of the chunk being filled. A text conversion
+    // stages each input text in a second arena of this size.
+    std::uint64_t payloadBytes = std::uint64_t{16} << 20;
+    // readText() and readBytes(): owned value Bytes, a read's UTF-8 texts or
+    // raw Byte values together.
+    std::uint64_t readPayloadBytes = std::uint64_t{256} << 20;
 };
 
 enum class Status : std::uint8_t {
@@ -116,6 +117,17 @@ struct TextChunk {
 
 using TextVisitor = std::function<Visit(const TextChunk&)>;
 
+// Borrowed equal-length arrays, valid only during the visitor call; a value is
+// the sample's raw Bytes as stored, an invalid sample's is empty.
+struct BytesChunk {
+    std::uint64_t firstSample = 0;           // absolute sample index of time[0] and value[0]
+    const double* time = nullptr;            // the group's axis, see Reader::axis
+    const std::string_view* value = nullptr;
+    std::size_t size = 0;
+};
+
+using BytesVisitor = std::function<Visit(const BytesChunk&)>;
+
 // The caller's control of one operation, valid for the operation's duration.
 struct Control {
     const std::atomic<bool>* cancel = nullptr;  // set from any thread
@@ -132,7 +144,7 @@ struct ScanResult {
     std::uint64_t firstSample = 0;   // request start, clamped to the cycle count
     std::uint64_t sampleCount = 0;   // request length after clamping
     std::uint64_t samplesRead = 0;   // delivered in order from firstSample
-    std::uint64_t invalidValues = 0;  // of the values delivered, the invalid ones: NaN or an empty text
+    std::uint64_t invalidValues = 0;  // of the values delivered, the invalid ones: NaN, an empty text or an empty Byte value
     std::uint64_t bytesRead = 0;     // stored Bytes this operation read from the file
     std::uint64_t bytesInflated = 0; // Bytes this operation's inflation produced
 };
@@ -146,6 +158,11 @@ struct ReadResult : ScanResult {
 // readText()'s counterpart: only an Ok outcome carries texts, samplesRead each.
 struct ReadTextResult : ScanResult {
     TextSeries series;
+};
+
+// readBytes()'s counterpart: only an Ok outcome carries values, samplesRead each.
+struct ReadBytesResult : ScanResult {
+    BytesSeries series;
 };
 
 // readArray()'s counterpart: only an Ok outcome carries values; `time` then has
@@ -184,15 +201,17 @@ struct Axis {
 // `group` and `channel` index File.groups. Every operation clamps its request
 // to the channel's sample count; an empty clamped request of a decodable
 // channel is Ok and Complete with zero samples. A textual channel
-// (Channel.textual) delivers UTF-8 texts through scanText() and readText(), an
-// array channel (Channel.array) its elements through scanArray() and
-// readArray(), every other decodable channel values through scan() and read();
-// each pair refuses the other kinds with an Error. A value the file marks
-// invalid (its invalidation bit set in row storage — an array element's own
-// bit, cn_inval_bit_pos plus its offset — or the channel's all-values-invalid
-// flag) is delivered at its time as NaN, or as an empty text, and counted in
-// invalidValues, and so is an MLSD sample whose size channel's sample is
-// marked invalid; column storage's invalidation bits are not evaluated. An
+// (Channel.textual) delivers UTF-8 texts through scanText() and readText(), a
+// Byte channel (Channel.binary) its raw Bytes through scanBytes() and
+// readBytes(), an array channel (Channel.array) its elements through
+// scanArray() and readArray(), every other decodable channel values through
+// scan() and read(); each pair refuses the other kinds with an Error. A value
+// the file marks invalid (its invalidation bit set in row storage — an array
+// element's own bit, cn_inval_bit_pos plus its offset — or the channel's
+// all-values-invalid flag) is delivered at its time as NaN, or as an empty
+// text or Byte value, and counted in invalidValues, and so is an MLSD sample
+// whose size channel's sample is marked invalid; column storage's
+// invalidation bits are not evaluated. An
 // unready reader, an unknown group or channel, a channel outside the read set
 // or unreadable data is an Error; a source whose length or write time changed
 // since opening, checked before and after the traversal, is SourceChanged and
@@ -229,18 +248,35 @@ public:
                     const Control& control = {}) noexcept;
 
     // scanText() is scan() for a textual channel, except that a chunk also
-    // closes early when its next text would not fit Limits::textBytes, so it
-    // may hold fewer than chunkValues samples. A single text larger than that
-    // arena is a ResourceLimit (Resource::Scratch).
+    // closes early when its next text would not fit Limits::payloadBytes, so
+    // it may hold fewer than chunkValues samples. A single text larger than
+    // that arena is a ResourceLimit (Resource::Scratch).
     ScanResult scanText(std::uint32_t group, std::uint32_t channel, std::uint64_t firstSample,
                         std::uint64_t sampleCount, const Control& control,
                         const TextVisitor& visitor) noexcept;
     // readText() admits the clamped request against Limits::readValues, then
     // collects the same traversal and refuses the sample whose text would pass
-    // Limits::readTextBytes (Resource::Output, in Bytes), discarding the texts.
+    // Limits::readPayloadBytes (Resource::Output, in Bytes), discarding the
+    // texts.
     ReadTextResult readText(std::uint32_t group, std::uint32_t channel, std::uint64_t firstSample = 0,
                             std::uint64_t sampleCount = std::numeric_limits<std::uint64_t>::max(),
                             const Control& control = {}) noexcept;
+
+    // scanBytes() is scanText() for a Byte channel: each value is the
+    // sample's raw Bytes, never transcoded nor ended at a NUL - a fixed
+    // channel's whole width, an MLSD channel's valid Bytes, a VLSD channel's
+    // whole value. Its chunks close early and a single value is refused under
+    // Limits::payloadBytes as scanText()'s texts are.
+    ScanResult scanBytes(std::uint32_t group, std::uint32_t channel, std::uint64_t firstSample,
+                         std::uint64_t sampleCount, const Control& control,
+                         const BytesVisitor& visitor) noexcept;
+    // readBytes() admits the clamped request against Limits::readValues, then
+    // collects the same traversal and refuses the sample whose value would
+    // pass Limits::readPayloadBytes (Resource::Output, in Bytes), discarding
+    // the values.
+    ReadBytesResult readBytes(std::uint32_t group, std::uint32_t channel, std::uint64_t firstSample = 0,
+                              std::uint64_t sampleCount = std::numeric_limits<std::uint64_t>::max(),
+                              const Control& control = {}) noexcept;
 
     // scanArray() is scan() for an array channel: each sample delivers the
     // values of `elements`, the window clamped to Channel.array.element_count;

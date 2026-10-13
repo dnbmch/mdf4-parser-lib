@@ -1,8 +1,8 @@
 /*
  *  mdf4-parser basic example.
  *  Opens an MDF4 measurement file once, prints its structure from the protobuf
- *  metadata, then reads the first decodable channel's samples, values, texts
- *  or an array's elements, from that same opened source.
+ *  metadata, then reads the first decodable channel's samples, values, texts,
+ *  Bytes or an array's elements, from that same opened source.
  *
  *  Build:
  *    cd examples/basic
@@ -14,6 +14,7 @@
  *    ./build/mdf4_basic                    # no file: one DROPPED diagnostic
  */
 
+#include <iomanip>
 #include <iostream>
 #include <string>
 
@@ -93,6 +94,23 @@ int main(int argc, char* argv[]) {
             else
                 cout << texts.series.text.size() << " texts, first \"" << texts.series.text.front()
                      << "\" at " << texts.series.time.front() << endl;
+            break;
+        }
+        // A Byte channel's samples are raw Bytes, read through readBytes().
+        if (group.channels(c).binary()) {
+            const mdf4::ReadBytesResult values = reader.readBytes(uint32_t(g), uint32_t(c));
+            cout << "Read " << group.channels(c).name() << ": ";
+            if (values.outcome.status != mdf4::Status::Ok)
+                cout << "not read at " << values.outcome.location << ": " << values.outcome.message << endl;
+            else if (values.series.value.empty())
+                cout << "no samples" << endl;
+            else {
+                cout << values.series.value.size() << " values, first " << values.series.value.front().size()
+                     << " Bytes at " << values.series.time.front() << ":" << hex;
+                for (unsigned char byte : values.series.value.front())
+                    cout << ' ' << setw(2) << setfill('0') << unsigned(byte);
+                cout << dec << endl;
+            }
             break;
         }
         // A read is bounded by the reader's output allowance; a longer channel
